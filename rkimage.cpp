@@ -298,7 +298,7 @@ RKIMAGE_ITEM* FindItem(RKIMAGE_HDR* prkimage, const char* name)
 	return NULL;
 }
 
-extern unsigned long CRC_32_NEW( unsigned char * aData, unsigned long aSize, unsigned long prev_crc );
+extern unsigned long CRC_32_NEW( unsigned char * aData, unsigned int aSize, unsigned int prev_crc );
 extern "C" int check_image_rsa(const char* imageFilePath, unsigned int fwOffset, unsigned int fwsize);
 /*
     success return 0
@@ -308,7 +308,7 @@ int check_image_crc(const char* mtddevname, unsigned long image_size)
 {
 	int size = 32<<9;
 	char buffer[16*1024] = "";
-	unsigned long crc = 0;
+	unsigned int crc = 0;
 	int remain = image_size;
 	int read_count = 0;
 	int r=0;
@@ -349,10 +349,10 @@ int check_image_crc(const char* mtddevname, unsigned long image_size)
     file_offset += read_count;
     
 	close(fdread);
-	if( crc != *(unsigned long*)buffer )
+	if( crc != *(unsigned int*)buffer )
 	{
 		LOGE("Check failed\n");
-        	LOGI("crc = %04lx  buffer=%04lx \n", crc, *(unsigned long*)buffer);
+		LOGI("crc = %04lx  buffer=%04lx \n", crc, *(unsigned int*)buffer);
 		return -1;
 	}
 
