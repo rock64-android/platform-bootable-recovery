@@ -30,6 +30,7 @@
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 #include <time.h>
+#include <fs_mgr.h>
 #include <unistd.h>
 
 #include "applypatch/applypatch.h"
@@ -37,8 +38,11 @@
 #include "mincrypt/sha.h"
 #include "minzip/Hash.h"
 #include "updater.h"
+#include "emmcutils/rk_emmcutils.h"
 
 #define BLOCKSIZE 4096
+
+static struct fstab *fstab = NULL;
 
 // Set this to 0 to interpret 'erase' transfers to mean do a
 // BLKDISCARD ioctl (the normal behavior).  Set to 1 to interpret
@@ -288,6 +292,75 @@ static void* unzip_new_data(void* cookie) {
     mzProcessZipEntryContents(nti->za, nti->entry, receive_new_data, nti);
     return NULL;
 }
+
+static void load_volume_table()
+{
+    int i;
+    int ret;
+	
+	if(fstab != NULL) {
+		printf("already load volume table.\n");
+    	return;
+	}
+	
+	int emmcState = getEmmcState();
+    if(emmcState) {
+		fstab = fs_mgr_read_fstab("/etc/recovery.emmc.fstab");
+	}else {
+    	fstab = fs_mgr_read_fstab("/etc/recovery.fstab");
+	}
+	
+    if (!fstab) {
+        printf("failed to read /etc/recovery.fstab\n");
+        return;
+    }
+
+    ret = fs_mgr_add_entry(fstab, "/tmp", "ramdisk", "ramdisk");
+    if (ret < 0 ) {
+        printf("failed to add /tmp entry to fstab\n");
+        fs_mgr_free_fstab(fstab);
+        fstab = NULL;
+        return;
+    }
+
+    printf("recovery filesystem table\n");
+    printf("=========================\n");
+    for (i = 0; i < fstab->num_entries; ++i) {
+        Volume* v = &fstab->recs[i];
+        printf("  %d %s %s %s %lld\n", i, v->mount_point, v->fs_type,
+               v->blk_device, v->length);
+    }
+    printf("\n");
+}
+
+static Volume* volume_for_path(const char* path) {
+    return fs_mgr_get_entry_for_mount_point(fstab, path);
+}
+
+static char* getDevicePath(char *mtdDevice) {
+	int emmcEnabled = getEmmcState();
+	char devicePath[128] = "/";
+	if(emmcEnabled) {
+		if(fstab == NULL) {
+			load_volume_table();
+		}
+	
+		if(strstr(mtdDevice, "/dev/block/rknand_")) {
+			strcat(devicePath, mtdDevice+18);
+			printf("mtd device %s\n", devicePath);
+			Volume* v = volume_for_path(devicePath);
+			if (v != NULL) {
+				printf("get volume path %s\n", v->blk_device);
+				return v->blk_device;
+			}else {
+				printf("Cannot load volume %s!\n", devicePath);
+			}
+		}
+	}
+
+	return mtdDevice;
+}
+
 
 static int ReadBlocks(RangeSet* src, uint8_t* buffer, int fd) {
     int i;
@@ -1600,10 +1673,14 @@ static Value* PerformBlockImageUpdate(const char* name, State* state, int argc, 
         goto pbiudone;
     }
 
-    params.fd = TEMP_FAILURE_RETRY(open(blockdev_filename->data, O_RDWR));
+    printf("BlockImageUpdateFn: blockdev_filename: %s\n", blockdev_filename->data);
+    char *device = getDevicePath(blockdev_filename->data);
+    printf("BlockImageUpdateFn: after getDevicePath blockdev_filename: %s\n", device);
+
+    params.fd = TEMP_FAILURE_RETRY(open(device, O_RDWR));
 
     if (params.fd == -1) {
-        fprintf(stderr, "open \"%s\" failed: %s\n", blockdev_filename->data, strerror(errno));
+        fprintf(stderr, "open \"%s\" failed: %s\n", device, strerror(errno));
         goto pbiudone;
     }
 
@@ -1674,7 +1751,7 @@ static Value* PerformBlockImageUpdate(const char* name, State* state, int argc, 
         }
 
         if (stash_max_blocks >= 0) {
-            res = CreateStash(state, stash_max_blocks, blockdev_filename->data,
+            res = CreateStash(state, stash_max_blocks, device,
                     &params.stashbase);
 
             if (res == -1) {
@@ -1903,9 +1980,13 @@ Value* RangeSha1Fn(const char* name, State* state, int argc, Expr* argv[]) {
         goto done;
     }
 
-    int fd = open(blockdev_filename->data, O_RDWR);
+    printf("BlockImageUpdateFn: blockdev_filename: %s\n", blockdev_filename->data);
+    char *device = getDevicePath(blockdev_filename->data);
+    printf("BlockImageUpdateFn: after getDevicePath blockdev_filename: %s\n", device);
+
+    int fd = open(device, O_RDWR);
     if (fd < 0) {
-        ErrorAbort(state, "open \"%s\" failed: %s", blockdev_filename->data, strerror(errno));
+        ErrorAbort(state, "open \"%s\" failed: %s", device, strerror(errno));
         goto done;
     }
 
@@ -1918,14 +1999,14 @@ Value* RangeSha1Fn(const char* name, State* state, int argc, Expr* argv[]) {
     int i, j;
     for (i = 0; i < rs->count; ++i) {
         if (!check_lseek(fd, (off64_t)rs->pos[i*2] * BLOCKSIZE, SEEK_SET)) {
-            ErrorAbort(state, "failed to seek %s: %s", blockdev_filename->data,
+            ErrorAbort(state, "failed to seek %s: %s", device,
                 strerror(errno));
             goto done;
         }
 
         for (j = rs->pos[i*2]; j < rs->pos[i*2+1]; ++j) {
             if (read_all(fd, buffer, BLOCKSIZE) == -1) {
-                ErrorAbort(state, "failed to read %s: %s", blockdev_filename->data,
+                ErrorAbort(state, "failed to read %s: %s", device,
                     strerror(errno));
                 goto done;
             }
