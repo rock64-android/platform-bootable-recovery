@@ -1619,12 +1619,13 @@ void checkSDRemoved() {
 	}
 
 	while(1) {
-		int value2 = -1;
+		//int value2 = -1;
 		int value = access(v->blk_device, 0);
-		if(sec_dev) {
-			value2 = access(sec_dev, 0);
-		}
-		if(value == -1 && value2 == -1) {
+		//if(sec_dev) {
+		//	value2 = access(sec_dev, 0);
+		//}
+		//if(value == -1 && value2 == -1) {
+		if(value == -1) {
 			printf("remove sdcard\n");
 			break;
 		}else {
