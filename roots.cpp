@@ -402,6 +402,7 @@ int erase_persistent_partition() {
     return (int) oem_unlock_enabled;
 }
 
+extern char EX_SDCARD_ROOT[256];
 int setup_install_mounts() {
     if (fstab == NULL) {
         LOGE("can't set up install mounts: no fstab loaded\n");
@@ -419,8 +420,13 @@ int setup_install_mounts() {
 
         } else {
             if (ensure_path_unmounted(v->mount_point) != 0) {
-                LOGE("failed to unmount %s\n", v->mount_point);
-                return -1;
+                if(strcmp(v->mount_point, EX_SDCARD_ROOT) == 0) {
+                    //nothing
+                    printf("%s line=%d skip external sd \n", __FUNCTION__, __LINE__);
+                } else {
+                    LOGE("failed to unmount %s\n", v->mount_point);
+                    return -1;
+                }
             }
         }
     }
