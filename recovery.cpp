@@ -2032,10 +2032,10 @@ int main(int argc, char **argv) {
         wipe_data(false, device);
     }
 
+    rksdboot.check_device_remove();
+
     // Save logs and clean up before rebooting or shutting down.
     finish_recovery(send_intent);
-
-    rksdboot.check_device_remove();
 
     switch (after) {
         case Device::SHUTDOWN:
