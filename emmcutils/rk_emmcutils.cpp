@@ -28,6 +28,8 @@ int getEmmcState() {
 	result = 2;
     } else if(!strcmp(bootmode, "emmc")) {
         result = 1;
+    } else if(!strcmp(bootmode, "sd")) {
+        result = 3;
     }else {
         result = 0;
     }
