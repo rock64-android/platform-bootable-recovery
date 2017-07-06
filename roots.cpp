@@ -42,12 +42,18 @@ extern struct selabel_handle *sehandle;
 void load_volume_table()
 {
     int i;
-    int ret;
+    int ret,fd;
+    char *s = NULL;
+    char cmdline[1024];
+    fd= open("/proc/cmdline", O_RDONLY);
+    ret = read(fd,(char*)cmdline, 1024);
+    LOGE("TUG :get cmdline=%s\n",cmdline);
+    s = strstr(cmdline , "sdfwupdate");
 
     int emmcState = getEmmcState();
     if (emmcState == 2) {
 	fstab = fs_mgr_read_fstab("/etc/recovery.nvme.fstab");
-    } else if(emmcState == 1) {
+    } else if(emmcState == 1 || s != NULL) {
         fstab = fs_mgr_read_fstab("/etc/recovery.emmc.fstab");
     } else if(emmcState == 3) {
         fstab = fs_mgr_read_fstab("/etc/recovery.sd.fstab");
